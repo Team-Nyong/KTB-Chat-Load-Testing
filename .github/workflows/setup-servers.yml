@@ -11,32 +11,24 @@ on:
         options:
           - develop
           - production
+      server_ips:
+        description: '서버 IP (JSON 배열 형식: ["ip1","ip2"])'
+        required: true
+        type: string
 
 env:
   DEPLOY_PATH: /home/ubuntu/chat-be
   SSH_USER: ubuntu
 
 jobs:
-  # 먼저 서버 목록을 파싱
-  prepare:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: |
-          echo "matrix=${{ secrets.SERVER_IPS }}" >> $GITHUB_OUTPUT
-
   setup:
-    needs: prepare
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     strategy:
       fail-fast: false
       max-parallel: 5
       matrix:
-        server: ${{ fromJson(needs.prepare.outputs.matrix) }}
+        server: ${{ fromJson(inputs.server_ips) }}
 
     steps:
       - name: Checkout

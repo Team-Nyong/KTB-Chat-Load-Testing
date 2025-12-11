@@ -113,7 +113,7 @@ public class UserController {
     /**
      * 프로필 이미지 삭제
      */
-    @Operation(summary = "프로필 이미지 삭제", description = "현재 프로필 이미지를 삭제합니다.")
+    @Operation(summary = "프로필 이미지 삭제", description = "프로필 이미지를 삭제합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "이미지 삭제 성공", content = @Content(schema = @Schema(implementation = StandardResponse.class), examples = @ExampleObject(value = "{\"success\":true,\"message\":\"프로필 이미지가 삭제되었습니다.\"}"))),
             @ApiResponse(responseCode = "401", description = "인증 실패", content = @Content(schema = @Schema(implementation = StandardResponse.class))),
