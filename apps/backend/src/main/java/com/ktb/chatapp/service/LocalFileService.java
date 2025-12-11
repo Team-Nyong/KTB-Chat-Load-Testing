@@ -8,6 +8,15 @@ import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.util.FileUtil;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -15,17 +24,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
-public class LocalFileService implements FileService {
+@Profile("disabled")
+public class LocalFileService {
 
     private final Path fileStorageLocation;
     private final FileRepository fileRepository;
@@ -33,15 +36,15 @@ public class LocalFileService implements FileService {
     private final RoomRepository roomRepository;
 
     public LocalFileService(@Value("${file.upload-dir:uploads}") String uploadDir,
-                      FileRepository fileRepository,
-                      MessageRepository messageRepository,
-                      RoomRepository roomRepository) {
+                            FileRepository fileRepository,
+                            MessageRepository messageRepository,
+                            RoomRepository roomRepository) {
         this.fileRepository = fileRepository;
         this.messageRepository = messageRepository;
         this.roomRepository = roomRepository;
         this.fileStorageLocation = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
-    
+
     @PostConstruct
     public void init() {
         try {
@@ -51,7 +54,7 @@ public class LocalFileService implements FileService {
         }
     }
 
-    @Override
+
     public FileUploadResult uploadFile(MultipartFile file, String uploaderId) {
         try {
             // 파일 보안 검증
@@ -101,7 +104,7 @@ public class LocalFileService implements FileService {
         }
     }
 
-    @Override
+
     public String storeFile(MultipartFile file, String subDirectory) {
         try {
             // 파일 보안 검증
@@ -144,7 +147,7 @@ public class LocalFileService implements FileService {
         }
     }
 
-    @Override
+
     public Resource loadFileAsResource(String fileName, String requesterId) {
         try {
             // 1. 파일 조회
@@ -182,7 +185,7 @@ public class LocalFileService implements FileService {
         }
     }
 
-    @Override
+
     public boolean deleteFile(String fileId, String requesterId) {
         try {
             File fileEntity = fileRepository.findById(fileId)

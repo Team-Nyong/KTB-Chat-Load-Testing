@@ -1,16 +1,10 @@
 package com.ktb.chatapp.service;
 
-import org.springframework.core.io.Resource;
-import org.springframework.web.multipart.MultipartFile;
+import com.ktb.chatapp.dto.S3FileResponse;
+import com.ktb.chatapp.dto.S3UploadRequest;
 
 public interface FileService {
 
-    FileUploadResult uploadFile(MultipartFile file, String uploaderId);
-
-    String storeFile(MultipartFile file, String subDirectory);
-
-    Resource loadFileAsResource(String fileName, String requesterId);
-
-    boolean deleteFile(String fileId, String requesterId);
+    FileUploadResult saveS3Metadata(S3UploadRequest request, String uploaderId);
+    S3FileResponse getFile(String fileId);
 }
-
