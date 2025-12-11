@@ -11,4 +11,4 @@ FROM eclipse-temurin:21.0.2_13-jre AS runtime
 WORKDIR /app
 COPY --from=builder /workspace/target/*.jar app.jar
 EXPOSE 5001 5002
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Xms512m", "-Xmx1g", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]

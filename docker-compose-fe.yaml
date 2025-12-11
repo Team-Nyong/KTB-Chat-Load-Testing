@@ -1,0 +1,20 @@
+services:
+  frontend:
+    build:
+      context: apps/frontend
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
+    image: ${DOCKER_FE_IMG_NAME}
+    container_name: frontend-ktb
+    restart: unless-stopped
+    ports:
+      - "${FE_PORT}:3000"
+
+# DOCKER_FE_IMG_NAME=ljh09060/ktb-chat-fe:latest
+# NEXT_PUBLIC_API_URL=https://chat.goorm-ktb-006.goorm.team
+# NEXT_PUBLIC_SOCKET_URL=https://chat.goorm-ktb-006.goorm.team
+# FE_PORT=3000
