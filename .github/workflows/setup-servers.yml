@@ -35,8 +35,10 @@ jobs:
           echo "$VALUE" | python3 -c "import sys,json; json.load(sys.stdin)" && echo "Valid JSON" || echo "Invalid JSON"
 
       - id: set-matrix
+        env:
+          SERVER_IPS: ${{ secrets.SERVER_IPS }}
         run: |
-          echo "matrix=${{ secrets.SERVER_IPS }}" >> $GITHUB_OUTPUT
+          echo "matrix=$SERVER_IPS" >> $GITHUB_OUTPUT
 
   setup:
     needs: prepare
