@@ -1,0 +1,30 @@
+# S3 + CloudFront 정적 배포용 빌드
+# 사용법:
+#   docker compose -f docker-compose-fe-s3.yaml build
+#   docker compose -f docker-compose-fe-s3.yaml up
+#   빌드 결과물: ./out 폴더에 추출됨
+#   S3 업로드: aws s3 sync out/ s3://버킷명 --delete
+
+services:
+  frontend-s3:
+    build:
+      context: apps/frontend
+      dockerfile: Dockerfile.s3
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
+    image: ${DOCKER_FE_S3_IMG_NAME}
+    container_name: frontend-s3-build
+    volumes:
+      - ./out:/output
+    # 빌드 후 out/ 폴더를 /output으로 복사
+    command: sh -c "cp -r /app/out/* /output/ && ls -la /output"
+
+# DOCKER_FE_S3_IMG_NAME=ljh09060/ktb-chat-fe-s3:latest
+# NEXT_PUBLIC_API_URL=https://chat.goorm-ktb-006.goorm.team
+# NEXT_PUBLIC_SOCKET_URL=https://chat.goorm-ktb-006.goorm.team
+
+# docker compose -f docker-compose-fe-s3.yaml --env-file .env.s3 up --build

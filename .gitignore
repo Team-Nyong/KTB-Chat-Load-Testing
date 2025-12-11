@@ -53,3 +53,7 @@ yarn-error.log*
 # Misc
 .cache/
 *.tsbuildinfo
+
+# fe s3 build
+out/
+.env.s3
