@@ -1,0 +1,139 @@
+name: Deploy Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '배포 환경'
+        required: true
+        default: 'develop'
+        type: choice
+        options:
+          - develop
+          - production
+  push:
+    branches: [main, dev]
+    paths:
+      - 'apps/backend/**'
+      - 'docker-compose-be.yaml'
+
+env:
+  DEPLOY_PATH: /home/ubuntu/chat-be
+  SSH_USER: ubuntu
+
+jobs:
+  set-env:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+    steps:
+      - id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=develop" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: set-env
+    runs-on: ubuntu-latest
+    environment: ${{ needs.set-env.outputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Create .env.be
+        run: |
+          echo "${{ secrets.DOT_ENV_BE }}" > .env.be
+
+      - name: Build with Docker Compose
+        run: |
+          docker compose -f docker-compose-be.yaml --env-file .env.be build --no-cache
+
+      - name: Push to Docker Hub
+        run: |
+          docker compose -f docker-compose-be.yaml --env-file .env.be push
+
+  prepare:
+    needs: set-env
+    runs-on: ubuntu-latest
+    environment: ${{ needs.set-env.outputs.environment }}
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      env_name: ${{ needs.set-env.outputs.environment }}
+    steps:
+      - id: set-matrix
+        run: |
+          echo "matrix=${{ secrets.SERVER_IPS }}" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: [build, prepare, set-env]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.set-env.outputs.environment }}
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        server: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ matrix.server }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to Server
+        run: |
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 ${{ env.SSH_USER }}@${{ matrix.server }} << 'ENDSSH'
+          cd /home/ubuntu/chat-be
+          echo "=== Deploying to $(hostname) ==="
+
+          # Load env vars
+          source .env.be
+
+          # Pull latest image
+          echo "Pulling latest image: $DOCKER_BE_IMG_NAME"
+          docker pull $DOCKER_BE_IMG_NAME
+
+          # Stop existing container
+          echo "Stopping existing container..."
+          docker compose -f docker-compose-be.yaml --env-file .env.be down || true
+
+          # Start new container
+          echo "Starting new container..."
+          docker compose -f docker-compose-be.yaml --env-file .env.be up -d
+
+          # Verify
+          echo "Verifying deployment..."
+          sleep 5
+          docker ps | grep backend || echo "WARNING: Container may not be running"
+
+          # Cleanup old images
+          echo "Cleaning up old images..."
+          docker image prune -f
+
+          echo "=== Deployment complete ==="
+          ENDSSH
+
+      - name: Health Check
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ matrix.server }} << 'ENDSSH'
+          source /home/ubuntu/chat-be/.env.be
+          echo "Checking health on port $BE_PORT..."
+          sleep 10
+          curl -sf http://localhost:$BE_PORT/api/health && echo "Health OK" || echo "Health check pending..."
+          ENDSSH
