@@ -29,7 +29,10 @@ public class MessageResponseMapper {
          * @param file    첨부 파일 정보 (null 가능)
          * @return MessageResponse DTO
          */
+
         public MessageResponse mapToMessageResponse(Message message, User sender, File file) {
+
+
                 MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                                 .id(message.getId())
                                 .content(message.getContent())

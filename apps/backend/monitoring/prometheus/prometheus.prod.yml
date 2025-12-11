@@ -28,7 +28,7 @@ scrape_configs:
 
   - job_name: 'redis'
     static_configs:
-      - targets: ['IP:PORT']
+      - targets: ['REDIS_SESSION_EXPORTER_IP:9121', 'REDIS_SOCKETIO_EXPORTER_IP:9122']
         labels:
           environment: 'production'
 
