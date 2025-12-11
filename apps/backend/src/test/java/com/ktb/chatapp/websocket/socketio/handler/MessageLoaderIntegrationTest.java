@@ -53,7 +53,7 @@ class MessageLoaderIntegrationTest {
     private Faker faker;
     private String roomId;
     private String userId;
-    
+
     @BeforeEach
     void setUp() {
         faker = new Faker();
@@ -64,9 +64,9 @@ class MessageLoaderIntegrationTest {
         messageLoader = new MessageLoader(
                 messageRepository,
                 userRepository,
-                new MessageResponseMapper(fileRepository),
-                messageReadStatusService
-        );
+                fileRepository,
+                new MessageResponseMapper(),
+                messageReadStatusService);
 
         // 테스트 사용자 생성 및 저장
         User testUser = User.builder()
