@@ -2,10 +2,14 @@
 const nextConfig = {
   reactStrictMode: false, // 에러 처리 문제 해결을 위해 일시적으로 비활성화
   transpilePackages: ['@vapor-ui/core', '@vapor-ui/icons'],
-  // Docker 빌드를 위한 standalone 출력 모드 (개발 환경에는 영향 없음)
-  output: 'standalone',
-  // monorepo에서 standalone 빌드 시 중첩 경로 방지
-  outputFileTracingRoot: __dirname,
+  // S3 + CloudFront 정적 배포를 위한 export 모드
+  output: 'export',
+  // SPA 라우팅을 위한 trailing slash
+  trailingSlash: true,
+  // 정적 export에서는 Next.js Image Optimization 사용 불가
+  images: {
+    unoptimized: true
+  },
   // 개발 환경에서의 에러 오버레이 설정
   devIndicators: {
     buildActivity: true,
