@@ -98,29 +98,37 @@ export const useMessageHandling = (socketRef, currentUser, router, handleSession
                 setUploadError(null);
                 setUploadProgress(0);
 
-                const uploadResponse = await fileService.uploadFile(
-                    messageData.fileData.file,
-                    (progress) => setUploadProgress(progress),
-                    currentUser.token,
-                    currentUser.sessionId
-                );
+        const uploadResponse = await fileService.uploadFile(
+          messageData.fileData.file,
+          (progress) => setUploadProgress(progress),
+          currentUser.token,
+          currentUser.sessionId,
+          "chat"
+        );
 
                 if (!uploadResponse.success) {
                     throw new Error(uploadResponse.message || '파일 업로드에 실패했습니다.');
                 }
 
-                socketRef.current.emit('chatMessage', {
-                    room: roomId,
-                    type: 'file',
-                    content: messageData.content || '',
-                    fileData: {
-                        _id: uploadResponse.data.file._id,
-                        filename: uploadResponse.data.file.filename,
-                        originalname: uploadResponse.data.file.originalname,
-                        mimetype: uploadResponse.data.file.mimetype,
-                        size: uploadResponse.data.file.size
-                    }
-                });
+       if (!uploadResponse.data?.file) {
+         throw new Error('업로드된 파일 정보를 불러올 수 없습니다.');
+       }
+
+       const uploadedFile = uploadResponse.data.file;
+
+       socketRef.current.emit('chatMessage', {
+         room: roomId,
+         type: 'file',
+         content: messageData.content || '',
+         fileData: {
+           id: uploadedFile.id,
+           _id: uploadedFile.id, // 기존 데이터와의 호환성을 위해 남겨둡니다.
+           url: uploadedFile.url,
+           originalFilename: uploadedFile.originalFilename || messageData.fileData.file.name,
+           mimetype: uploadedFile.mimetype || messageData.fileData.file.type,
+           size: uploadedFile.size || messageData.fileData.file.size
+         }
+       });
 
                 setFilePreview(null);
                 setMessage('');
