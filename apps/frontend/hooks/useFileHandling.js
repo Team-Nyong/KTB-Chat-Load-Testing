@@ -31,23 +31,31 @@ export const useFileHandling = (socketRef, currentUser, router, handleSessionErr
         file,
         (progress) => setUploadProgress(progress),
         currentUser.token,
-        currentUser.sessionId
+        currentUser.sessionId,
+        "chat"
       );
 
       if (!uploadResponse.success) {
         throw new Error(uploadResponse.message || '파일 업로드에 실패했습니다.');
       }
 
+      if (!uploadResponse.data?.file) {
+        throw new Error('업로드된 파일 정보를 불러올 수 없습니다.');
+      }
+
+      const uploadedFile = uploadResponse.data.file;
+
       await socketRef.current.emit('chatMessage', {
         room: roomId,
         type: 'file',
         content: content,
         fileData: {
-          _id: uploadResponse.data.file._id,
-          filename: uploadResponse.data.file.filename,
-          originalname: uploadResponse.data.file.originalname,
-          mimetype: uploadResponse.data.file.mimetype,
-          size: uploadResponse.data.file.size
+          id: uploadedFile.id,
+          _id: uploadedFile.id, // 기존 데이터와의 호환성을 위해 남겨둡니다.
+          url: uploadedFile.url,
+          originalFilename: uploadedFile.originalFilename || file.name,
+          mimetype: uploadedFile.mimetype || file.type,
+          size: uploadedFile.size || file.size
         }
       });
 
