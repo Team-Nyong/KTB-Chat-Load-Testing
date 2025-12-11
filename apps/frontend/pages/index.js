@@ -23,8 +23,8 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [serverStatus, setServerStatus] = useState({
-    checking: typeof window !== 'undefined', // 클라이언트에서만 체크
-    connected: false
+    checking: false, // 로딩 화면 없이 바로 폼 표시
+    connected: true  // 낙관적으로 연결됨으로 시작
   });
   const router = useRouter();
   const { login } = useAuth();
@@ -124,7 +124,7 @@ const Login = () => {
           border="1px solid var(--vapor-color-border-normal)"
         >
           <div className="text-center mb-[2rem]">
-            <img src="images/logo-h.png" className="w-1/2 mx-auto" />
+            <img src="/images/logo-h.png" className="w-1/2 mx-auto" />
           </div>
           <div className="text-center">
             <Text typography="body1">서버 연결 확인 중...</Text>
@@ -145,7 +145,7 @@ const Login = () => {
         render={<Form onSubmit={handleSubmit} />}
       >
         <div className="text-center mb-4">
-          <img src="images/logo-h.png" className="w-1/2 mx-auto" />
+          <img src="/images/logo-h.png" className="w-1/2 mx-auto" />
         </div>
 
         {error && (

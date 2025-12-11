@@ -1,0 +1,18 @@
+services:
+  frontend-s3:
+    build:
+      context: apps/frontend
+      dockerfile: Dockerfile.s3
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+        - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
+        - NEXT_PUBLIC_IMAGE_UPLOAD_URL=${NEXT_PUBLIC_IMAGE_UPLOAD_URL}
+    volumes:
+      - ./out:/out-copy
+
+# 사용법:
+# 1. 빌드 + out 폴더 추출:
+#    docker compose -f docker-compose-s3.yaml --env-file .env.s3 up --build
+#    docker compose -f docker-compose-s3.yaml run --rm frontend-s3 sh -c "cp -r /out/* /out-copy/"
+#
+# 2. ./out 폴더가 생성됨 → S3에 직접 업로드

@@ -1,22 +1,39 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
+// 환경변수로 빌드 모드 선택
+// STATIC_EXPORT=true → S3 정적 호스팅용 (out/ 폴더 생성)
+// STATIC_EXPORT 없음 → 서버 빌드용 (standalone)
+const isStaticExport = process.env.STATIC_EXPORT === 'true';
+
 const nextConfig = {
-  reactStrictMode: false, // 에러 처리 문제 해결을 위해 일시적으로 비활성화
+  reactStrictMode: false,
   transpilePackages: ['@vapor-ui/core', '@vapor-ui/icons'],
-  // Docker 빌드를 위한 standalone 출력 모드 (개발 환경에는 영향 없음)
-  output: 'standalone',
-  // monorepo에서 standalone 빌드 시 중첩 경로 방지
-  outputFileTracingRoot: __dirname,
-  // 개발 환경에서의 에러 오버레이 설정
+
+  // 빌드 모드에 따라 output 설정
+  output: isStaticExport ? 'export' : 'standalone',
+
+  // standalone 모드에서만 필요
+  ...(isStaticExport ? {} : { outputFileTracingRoot: path.join(__dirname, '../../') }),
+
+
+  // 정적 export 시 이미지 최적화 비활성화
+  images: {
+    unoptimized: isStaticExport,
+  },
+
   devIndicators: {
     buildActivity: true,
     buildActivityPosition: 'bottom-right'
   },
-  // 개발 환경에서만 더 자세한 에러 로깅
+
   ...(process.env.NODE_ENV === 'development' && {
     experimental: {
       forceSwcTransforms: true
     }
   })
 };
+
+console.log(`[Next.js Config] Build mode: ${isStaticExport ? 'Static Export (S3)' : 'Standalone (Server)'}`);
 
 module.exports = nextConfig;

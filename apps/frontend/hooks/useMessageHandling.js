@@ -86,23 +86,26 @@ export const useMessageHandling = (socketRef, currentUser, router, handleSession
                     messageData.fileData.file,
                     (progress) => setUploadProgress(progress),
                     currentUser.token,
-                    currentUser.sessionId
+                    currentUser.sessionId,
+                    "chat"
                 );
 
                 if (!uploadResponse.success) {
                     throw new Error(uploadResponse.message || '파일 업로드에 실패했습니다.');
                 }
 
+                const uploadedFile = uploadResponse.data.file;
                 socketRef.current.emit('chatMessage', {
                     room: roomId,
                     type: 'file',
                     content: messageData.content || '',
                     fileData: {
-                        _id: uploadResponse.data.file._id,
-                        filename: uploadResponse.data.file.filename,
-                        originalname: uploadResponse.data.file.originalname,
-                        mimetype: uploadResponse.data.file.mimetype,
-                        size: uploadResponse.data.file.size
+                        id: uploadedFile.id,
+                        _id: uploadedFile.id,
+                        url: uploadedFile.url,
+                        originalFilename: uploadedFile.originalFilename || messageData.fileData.file.name,
+                        mimetype: uploadedFile.mimetype || messageData.fileData.file.type,
+                        size: uploadedFile.size || messageData.fileData.file.size
                     }
                 });
 
