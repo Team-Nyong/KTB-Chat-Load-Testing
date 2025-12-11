@@ -11,40 +11,22 @@ on:
         options:
           - develop
           - production
-  push:
-    branches: [ main, dev ]
-    paths:
-      - 'apps/backend/**'
-      - 'docker-compose-be.yaml'
+      server_ips:
+        description: '서버 IP (JSON 배열 형식: ["ip1","ip2"])'
+        required: true
+        type: string
 
 env:
   DEPLOY_PATH: /home/ubuntu/chat-be
   SSH_USER: ubuntu
 
 jobs:
-  set-env:
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.set-env.outputs.environment }}
-    steps:
-      - id: set-env
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "environment=production" >> $GITHUB_OUTPUT
-          else
-            echo "environment=develop" >> $GITHUB_OUTPUT
-          fi
-
   build:
-    needs: set-env
     runs-on: ubuntu-latest
-    environment: ${{ needs.set-env.outputs.environment }}
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -58,45 +40,28 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-
       - name: Create .env.be
         run: |
           echo "${{ secrets.DOT_ENV_BE }}" > .env.be
           echo "" >> .env.be
-          
           echo "DOCKER_BE_IMG_NAME=${{ secrets.DOCKER_USERNAME }}/ktb-chat-be:latest" >> .env.be
 
       - name: Build and Push
         run: |
           source .env.be
-          
           echo "Building image: $DOCKER_BE_IMG_NAME"
-          
           docker build -t $DOCKER_BE_IMG_NAME ./apps/backend
-          
           docker push $DOCKER_BE_IMG_NAME
 
-  prepare:
-    needs: set-env
-    runs-on: ubuntu-latest
-    environment: ${{ needs.set-env.outputs.environment }}
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      env_name: ${{ needs.set-env.outputs.environment }}
-    steps:
-      - id: set-matrix
-        run: |
-          echo "matrix=${{ secrets.SERVER_IPS }}" >> $GITHUB_OUTPUT
-
   deploy:
-    needs: [ build, prepare, set-env ]
+    needs: build
     runs-on: ubuntu-latest
-    environment: ${{ needs.set-env.outputs.environment }}
+    environment: ${{ inputs.environment }}
     strategy:
       fail-fast: false
       max-parallel: 5
       matrix:
-        server: ${{ fromJson(needs.prepare.outputs.matrix) }}
+        server: ${{ fromJson(inputs.server_ips) }}
 
     steps:
       - name: Setup SSH Key
