@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   PdfIcon as FileText,
   ImageIcon as Image,
@@ -27,17 +27,53 @@ const FileMessage = ({
   const { user } = useAuth();
   const [error, setError] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [fileUrlFromBackend, setFileUrlFromBackend] = useState("");
   const messageDomRef = useRef(null);
+
+  const buildFileUrl = useCallback((forPreview = false) => {
+    console.log("msg: ", msg);
+    console.log("file: ", msg.file);
+    console.log(msg.file.url);
+    if (!msg?.file) return '';
+
+    const baseUrl = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_URL}/${msg.file.filename}`
+    if(forPreview) return baseUrl;
+
+    // if (msg.file.url) return msg.file.url;
+    // if (msg.file.s3Url) return msg.file.s3Url;
+
+    // if (!msg.file.filename) return '';
+
+    // const baseUrl = msg.file.url
+
+    // // 프리뷰일 땐 쿼리 안 붙이고 그냥 사용
+    // if (forPreview) {
+    //   return baseUrl;
+    // }
+
+    // if (!user?.token || !user?.sessionId) return baseUrl;
+
+    // const params = new URLSearchParams({
+    //   token: user.token,
+    //   sessionId: user.sessionId
+    // });
+
+    // params.append('download', 'true');
+
+    // return `${baseUrl}?${params.toString()}`;
+  }, [fileUrlFromBackend]);
+
+
   useEffect(() => {
     if (msg?.file) {
-      const url = fileService.getPreviewUrl(msg.file, user?.token, user?.sessionId, true);
+      const url = buildFileUrl(true);
       setPreviewUrl(url);
       console.debug('Preview URL generated:', {
-        filename: msg.file.filename,
+        fileId: msg.file.id || msg.file._id || msg.file.filename,
         url
       });
     }
-  }, [msg?.file, user?.token, user?.sessionId]);
+  }, [msg?.file, buildFileUrl]);
 
   if (!msg?.file) {
     console.error('File data is missing:', msg);
@@ -67,14 +103,14 @@ const FileMessage = ({
   const getDecodedFilename = (encodedFilename) => {
     try {
       if (!encodedFilename) return 'Unknown File';
-      
+
       const base64 = encodedFilename
         .replace(/-/g, '+')
         .replace(/_/g, '/');
-      
+
       const pad = base64.length % 4;
       const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64;
-      
+
       if (paddedBase64.match(/^[A-Za-z0-9+/=]+$/)) {
         return Buffer.from(paddedBase64, 'base64').toString('utf8');
       }
@@ -102,25 +138,24 @@ const FileMessage = ({
     setError(null);
 
     try {
-      if (!msg.file?.filename) {
-        throw new Error('파일 정보가 없습니다.');
+      const downloadUrl = buildFileUrl(false);
+      if (!downloadUrl) {
+        throw new Error('파일 URL을 찾을 수 없습니다.');
       }
 
-      if (!user?.token || !user?.sessionId) {
-        throw new Error('인증 정보가 없습니다.');
-      }
-
-      const baseUrl = fileService.getFileUrl(msg.file.filename, false);
-      const authenticatedUrl = `${baseUrl}?token=${encodeURIComponent(user?.token)}&sessionId=${encodeURIComponent(user?.sessionId)}&download=true`;
-      
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = authenticatedUrl;
-      document.body.appendChild(iframe);
-
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 5000);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = getDecodedFilename(
+        msg.file?.originalFilename ||
+        msg.file?.originalname ||
+        msg.file?.filename ||
+        'download'
+      );
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
     } catch (error) {
       console.error('File download error:', error);
@@ -134,18 +169,12 @@ const FileMessage = ({
     setError(null);
 
     try {
-      if (!msg.file?.filename) {
-        throw new Error('파일 정보가 없습니다.');
+      const viewUrl = buildFileUrl(true);
+      if (!viewUrl) {
+        throw new Error('파일 URL을 찾을 수 없습니다.');
       }
 
-      if (!user?.token || !user?.sessionId) {
-        throw new Error('인증 정보가 없습니다.');
-      }
-
-      const baseUrl = fileService.getFileUrl(msg.file.filename, true);
-      const authenticatedUrl = `${baseUrl}?token=${encodeURIComponent(user?.token)}&sessionId=${encodeURIComponent(user?.sessionId)}`;
-
-      const newWindow = window.open(authenticatedUrl, '_blank');
+      const newWindow = window.open(viewUrl, '_blank');
       if (!newWindow) {
         throw new Error('팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
       }
@@ -158,7 +187,10 @@ const FileMessage = ({
 
   const renderImagePreview = (originalname) => {
     try {
-      if (!msg?.file?.filename) {
+      const imageUrl = previewUrl || buildFileUrl(true);
+      console.log("get imageUrl: ", imageUrl);
+
+      if (!imageUrl) {
         return (
           <div className="flex items-center justify-center h-full bg-gray-100">
             <Image className="w-8 h-8 text-gray-400" />
@@ -166,16 +198,10 @@ const FileMessage = ({
         );
       }
 
-      if (!user?.token || !user?.sessionId) {
-        throw new Error('인증 정보가 없습니다.');
-      }
-
-      const previewUrl = fileService.getPreviewUrl(msg.file, user?.token, user?.sessionId, true);
-
       return (
         <div className="bg-transparent-pattern">
           <img
-            src={previewUrl}
+            src={imageUrl}
             alt={originalname}
             className="max-w-[400px] max-h-[400px] object-cover object-center rounded-md"
             onLoad={() => {
@@ -208,7 +234,12 @@ const FileMessage = ({
 
   const renderFilePreview = () => {
     const mimetype = msg.file?.mimetype || '';
-    const originalname = getDecodedFilename(msg.file?.originalname || 'Unknown File');
+    const originalname = getDecodedFilename(
+      msg.file?.originalFilename ||
+      msg.file?.originalname ||
+      msg.file?.filename ||
+      'Unknown File'
+    );
     const size = fileService.formatFileSize(msg.file?.size || 0);
 
     const previewWrapperClass = "overflow-hidden";
@@ -391,9 +422,10 @@ FileMessage.defaultProps = {
   msg: {
     file: {
       mimetype: '',
-      filename: '',
-      originalname: '',
-      size: 0
+      url: '',
+      originalFilename: '',
+      size: 0,
+      id: ''
     }
   },
   isMine: false,

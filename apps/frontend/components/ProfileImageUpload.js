@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import axiosInstance from '../services/axios.js';
 import { CameraIcon, CloseOutlineIcon } from '@vapor-ui/icons';
 import { Button, Text, Callout, IconButton, VStack, HStack } from '@vapor-ui/core';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,12 +59,8 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
       formData.append('profileImage', file);
 
       // 파일 업로드 요청
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/profile-image`, {
-        method: 'POST',
-        headers: {
-          'x-auth-token': user?.token,
-          'x-session-id': user?.sessionId
-        },
+      const response = await fetch(`${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_URL}/upload/profile`, {
+        method: 'PUT',
         body: formData
       });
 
@@ -72,17 +69,29 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
         throw new Error(errorData.message || '이미지 업로드에 실패했습니다.');
       }
 
-      const data = await response.json();
-      
-      // 로컬 스토리지의 사용자 정보 업데이트
-      const updatedUser = {
-        ...user,
-        profileImage: data.imageUrl
-      };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      // 서버에 저장
+      const serverUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/files/upload`;
+      console.log("serverurl: ", serverUrl);
 
-      // 부모 컴포넌트에 변경 알림
-      onImageChange(data.imageUrl);
+      const uploadUrl = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_URL}/upload/profile/${file.name}`
+
+      const serverResponse = await axiosInstance.post(serverUrl,
+        {
+          url: uploadUrl,
+          mimetype: file.type,
+          size: file.size,
+        },
+        {
+          withCredentials: true,
+        }
+      );
+
+      if (!serverResponse.data || serverResponse.data.success === false) {
+        return {
+          success: false,
+          message: serverResponse.data?.message || '파일 정보 저장에 실패했습니다.',
+        };
+      }
 
       Toast.success('프로필 이미지가 변경되었습니다.');
 

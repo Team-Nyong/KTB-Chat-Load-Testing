@@ -76,7 +76,7 @@ public class User {
                         user.setEncryptedEmail(encrypted);
                     }
                 } catch (Exception e) {
-                    // 암호화 실패 시 로그만 남기고 계속 진행
+
                     System.err.println("Email encryption failed: " + e.getMessage());
                 }
             }
