@@ -11,9 +11,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.ktb.chatapp.websocket.socketio.ChatDataStore;
 import com.ktb.chatapp.websocket.socketio.RedisChatDataStore;
 import lombok.extern.slf4j.Slf4j;
-import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
-import org.redisson.config.Config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,15 +32,6 @@ public class SocketIOConfig {
 
     @Value("${socketio.server.port:5002}")
     private Integer port;
-
-    @Value("${redis.host:localhost}")
-    private String redisHost;
-
-    @Value("${redis.port:6379}")
-    private Integer redisPort;
-
-    @Value("${redis.password:}")
-    private String redisPassword;
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     public SocketIOServer socketIOServer(AuthTokenListener authTokenListener, RedissonClient redissonClient) {
@@ -92,20 +81,5 @@ public class SocketIOConfig {
     @ConditionalOnProperty(name = "socketio.enabled", havingValue = "true", matchIfMissing = true)
     public ChatDataStore chatDataStore(RedissonClient redissonClient) {
         return new RedisChatDataStore(redissonClient);
-    }
-
-    @Bean(destroyMethod = "shutdown")
-    @ConditionalOnProperty(name = "socketio.enabled", havingValue = "true", matchIfMissing = true)
-    public RedissonClient redissonClient() {
-        Config config = new Config();
-        var singleServerConfig = config.useSingleServer()
-                .setAddress(String.format("redis://%s:%d", redisHost, redisPort))
-                .setDatabase(0);
-
-        if (redisPassword != null && !redisPassword.isBlank()) {
-            singleServerConfig.setPassword(redisPassword);
-        }
-
-        return Redisson.create(config);
     }
 }
