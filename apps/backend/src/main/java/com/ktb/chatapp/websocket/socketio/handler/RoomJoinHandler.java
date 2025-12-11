@@ -3,8 +3,6 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.corundumstudio.socketio.SocketIOClient;
 import com.corundumstudio.socketio.SocketIOServer;
 import com.corundumstudio.socketio.annotation.OnEvent;
-import com.ktb.chatapp.dto.FetchMessagesRequest;
-import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.JoinRoomSuccessResponse;
 import com.ktb.chatapp.dto.UserResponse;
 import com.ktb.chatapp.model.Message;
@@ -15,12 +13,13 @@ import com.ktb.chatapp.repository.RoomRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.websocket.socketio.SocketUser;
 import com.ktb.chatapp.websocket.socketio.UserRooms;
-import java.time.LocalDateTime;
-import java.util.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.*;
 
 import static com.ktb.chatapp.websocket.socketio.SocketIOEvents.*;
 
@@ -122,19 +121,19 @@ public class RoomJoinHandler {
 
             // 입장 메시지 브로드캐스트
             socketIOServer.getRoomOperations(roomId)
-                    .sendEvent(MESSAGE, messageResponseMapper.mapToMessageResponse(joinMessage, null));
+                    .sendEvent(MESSAGE, messageResponseMapper.mapToMessageResponse(joinMessage, null, null));
 
             // 참가자 목록 업데이트 브로드캐스트
             socketIOServer.getRoomOperations(roomId)
                     .sendEvent(PARTICIPANTS_UPDATE, participants);
 
-            log.info("User {} joined room {} successfully. Initial messages suppressed for duplicate prevention.", userName, roomId);
+            log.info("User {} joined room {} successfully. Initial messages suppressed for duplicate prevention.",
+                    userName, roomId);
 
         } catch (Exception e) {
             log.error("Error handling joinRoom", e);
             client.sendEvent(JOIN_ROOM_ERROR, Map.of(
-                    "message", e.getMessage() != null ? e.getMessage() : "채팅방 입장에 실패했습니다."
-            ));
+                    "message", e.getMessage() != null ? e.getMessage() : "채팅방 입장에 실패했습니다."));
         }
     }
 
