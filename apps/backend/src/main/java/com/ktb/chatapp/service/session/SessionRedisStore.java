@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
 import org.redisson.codec.JsonJacksonCodec;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,7 @@ public class SessionRedisStore implements SessionStore {
     private final JsonJacksonCodec sessionCodec;
     private final long sessionTtlSeconds;
 
-    public SessionRedisStore(RedissonClient redissonClient) {
+    public SessionRedisStore(@Qualifier("sessionRedisClient") RedissonClient redissonClient) {
         this.redissonClient = redissonClient;
         this.sessionCodec = new JsonJacksonCodec(createObjectMapper());
         this.sessionTtlSeconds = DurationStyle.detectAndParse(SESSION_TTL).getSeconds();

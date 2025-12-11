@@ -12,6 +12,7 @@ import com.ktb.chatapp.websocket.socketio.ChatDataStore;
 import com.ktb.chatapp.websocket.socketio.RedisChatDataStore;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,7 +35,9 @@ public class SocketIOConfig {
     private Integer port;
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    public SocketIOServer socketIOServer(AuthTokenListener authTokenListener, RedissonClient redissonClient) {
+    public SocketIOServer socketIOServer(
+            AuthTokenListener authTokenListener,
+            @Qualifier("socketIoRedisClient") RedissonClient socketIoRedissonClient) {
         com.corundumstudio.socketio.Configuration config = new com.corundumstudio.socketio.Configuration();
         config.setHostname(host);
         config.setPort(port);
@@ -55,7 +58,7 @@ public class SocketIOConfig {
         config.setUpgradeTimeout(10000);
 
         config.setJsonSupport(new JacksonJsonSupport(new JavaTimeModule()));
-        config.setStoreFactory(new RedissonStoreFactory(redissonClient));
+        config.setStoreFactory(new RedissonStoreFactory(socketIoRedissonClient));
 
         log.info("Socket.IO server configured on {}:{} with {} boss threads and {} worker threads",
                  host, port, config.getBossThreads(), config.getWorkerThreads());
@@ -79,7 +82,8 @@ public class SocketIOConfig {
 
     @Bean
     @ConditionalOnProperty(name = "socketio.enabled", havingValue = "true", matchIfMissing = true)
-    public ChatDataStore chatDataStore(RedissonClient redissonClient) {
-        return new RedisChatDataStore(redissonClient);
+    public ChatDataStore chatDataStore(
+            @Qualifier("socketIoRedisClient") RedissonClient socketIoRedissonClient) {
+        return new RedisChatDataStore(socketIoRedissonClient);
     }
 }
