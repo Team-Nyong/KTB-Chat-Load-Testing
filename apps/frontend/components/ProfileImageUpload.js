@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axiosInstance from '../services/axios.js';
 import { CameraIcon, CloseOutlineIcon } from '@vapor-ui/icons';
-import { Button, Text, Callout, IconButton, VStack, HStack } from '@vapor-ui/core';
+import { Button, Text, Callout, VStack, HStack } from '@vapor-ui/core';
 import { useAuth } from '@/contexts/AuthContext';
 import CustomAvatar from '@/components/CustomAvatar';
 import { Toast } from '@/components/Toast';
+import fileService from '../services/fileService';
 
 const ProfileImageUpload = ({ currentImage, onImageChange }) => {
   const { user } = useAuth();
@@ -31,68 +32,77 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      // 이미지 파일 검증
-      if (!file.type.startsWith('image/')) {
-        throw new Error('이미지 파일만 업로드할 수 있습니다.');
-      }
+    let tempPreviewUrl;
 
-      // 파일 크기 제한 (5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        throw new Error('파일 크기는 5MB를 초과할 수 없습니다.');
+    try {
+      const validation = await fileService.validateFile(file);
+      if (!validation.success) {
+        throw new Error(validation.message);
       }
 
       setUploading(true);
       setError('');
 
       // 파일 미리보기 생성
-      const objectUrl = URL.createObjectURL(file);
-      setPreviewUrl(objectUrl);
+      tempPreviewUrl = URL.createObjectURL(file);
+      setPreviewUrl(tempPreviewUrl);
 
       // 인증 정보 확인
-      if (!user?.token) {
+      if (!user?.token || !user?.sessionId) {
         throw new Error('인증 정보가 없습니다.');
       }
 
-      // FormData 생성
-      const formData = new FormData();
-      formData.append('profileImage', file);
-
-      // 파일 업로드 요청
-      const response = await fetch(`${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_URL}/upload/profile`, {
-        method: 'PUT',
-        body: formData
+      console.debug('[ProfileImageUpload] Start upload', {
+        name: file.name,
+        size: file.size,
+        type: file.type
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || '이미지 업로드에 실패했습니다.');
+      const uploadResult = await fileService.uploadFile(
+        file,
+        null,
+        user.token,
+        user.sessionId,
+        'profile'
+      );
+
+      console.debug('[ProfileImageUpload] S3 upload result', uploadResult);
+
+      if (!uploadResult.success || !uploadResult.data?.file?.url) {
+        throw new Error(uploadResult.message || '이미지 업로드에 실패했습니다.');
       }
 
-      // 서버에 저장
-      const serverUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/files/upload`;
-      console.log("serverurl: ", serverUrl);
+      const uploadUrl = uploadResult.data.file.url;
 
-      const uploadUrl = `${process.env.NEXT_PUBLIC_IMAGE_UPLOAD_URL}/upload/profile/${file.name}`
+      // 사용자 프로필에 이미지 URL 저장
+      const profileSaveUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/users/profile-image`;
+      console.debug('[ProfileImageUpload] Save profile image', {
+        profileSaveUrl,
+        uploadUrl
+      });
 
-      const serverResponse = await axiosInstance.post(serverUrl,
+      const profileResponse = await axiosInstance.post(
+        profileSaveUrl,
         {
           url: uploadUrl,
           mimetype: file.type,
-          size: file.size,
+          size: file.size
         },
-        {
-          withCredentials: true,
-        }
+        { withCredentials: true }
       );
 
-      if (!serverResponse.data || serverResponse.data.success === false) {
-        return {
-          success: false,
-          message: serverResponse.data?.message || '파일 정보 저장에 실패했습니다.',
-        };
+      if (!profileResponse?.data?.success) {
+        throw new Error(profileResponse?.data?.message || '프로필 이미지 저장에 실패했습니다.');
       }
 
+      const finalUrl = profileResponse.data.imageUrl || uploadUrl;
+
+      if (tempPreviewUrl && tempPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(tempPreviewUrl);
+      }
+
+      setPreviewUrl(finalUrl);
+      onImageChange(finalUrl);
       Toast.success('프로필 이미지가 변경되었습니다.');
 
       // 전역 이벤트 발생
@@ -102,12 +112,10 @@ const ProfileImageUpload = ({ currentImage, onImageChange }) => {
       console.error('Image upload error:', error);
       setError(error.message);
       setPreviewUrl(getProfileImageUrl(currentImage));
-      
-      // 기존 objectUrl 정리
-      if (previewUrl && previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(previewUrl);
-      }
     } finally {
+      if (tempPreviewUrl && tempPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(tempPreviewUrl);
+      }
       setUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
