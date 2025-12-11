@@ -24,6 +24,16 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Debug SERVER_IPS format
+        run: |
+          VALUE='${{ secrets.SERVER_IPS }}'
+          echo "Length: ${#VALUE}"
+          echo "First char: ${VALUE:0:1}"
+          echo "Second char: ${VALUE:1:1}"
+          echo "Last char: ${VALUE: -1}"
+          # JSON 유효성 검사
+          echo "$VALUE" | python3 -c "import sys,json; json.load(sys.stdin)" && echo "Valid JSON" || echo "Invalid JSON"
+
       - id: set-matrix
         run: |
           echo "matrix=${{ secrets.SERVER_IPS }}" >> $GITHUB_OUTPUT
