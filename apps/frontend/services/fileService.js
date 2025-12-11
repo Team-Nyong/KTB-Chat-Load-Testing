@@ -495,10 +495,14 @@ normalizeFileResponse(responseData, fallback = {}) {
   const file = responseData.file || responseData.data || responseData;
   if (!file) return null;
 
+  const fileId = file.id || file._id || file.fileId || file.filename || fallback.id;
   return {
-    id: file.id || file._id || file.fileId || file.filename || fallback.id,
+    id: fileId,
+    _id: fileId,
     url: file.url || file.s3Url || file.fileUrl || file.location || fallback.url,
+    filename: file.filename || fallback.filename,
     originalFilename: file.originalFilename || file.originalname || file.fileName || file.filename || fallback.originalFilename,
+    originalname: file.originalFilename || file.originalname || file.fileName || file.filename || fallback.originalFilename,
     mimetype: file.mimetype || file.mimeType || file.contentType || fallback.mimetype,
     size: file.size || file.fileSize || file.length || fallback.size
   };
