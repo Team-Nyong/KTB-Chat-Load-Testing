@@ -22,12 +22,6 @@ public class S3FileService implements FileService {
 
     private final FileRepository fileRepository;
 
-    @Value("${cloud.aws.s3.bucket}")
-    private String bucket;
-
-    @Value("${cloud.aws.region.static}")
-    private String region;
-
     @Override
     public FileUploadResult saveS3Metadata(S3UploadRequest request, String uploaderId) {
         try {
