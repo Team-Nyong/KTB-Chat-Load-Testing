@@ -3,6 +3,7 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FileResponse;
 import com.ktb.chatapp.dto.MessageResponse;
 import com.ktb.chatapp.dto.UserResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ public class MessageResponseMapper {
          * @param file    첨부 파일 정보 (null 가능)
          * @return MessageResponse DTO
          */
-        public MessageResponse mapToMessageResponse(Message message, User sender, com.ktb.chatapp.model.File file) {
+        public MessageResponse mapToMessageResponse(Message message, User sender, File file) {
                 MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                                 .id(message.getId())
                                 .content(message.getContent())
