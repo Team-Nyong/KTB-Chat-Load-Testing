@@ -11,44 +11,24 @@ on:
         options:
           - develop
           - production
+      server_ips:
+        description: '서버 IP (JSON 배열 형식: ["ip1","ip2"])'
+        required: true
+        type: string
 
 env:
   DEPLOY_PATH: /home/ubuntu/chat-be
   SSH_USER: ubuntu
 
 jobs:
-  # 먼저 서버 목록을 파싱
-  prepare:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Debug SERVER_IPS format
-        run: |
-          VALUE='${{ secrets.SERVER_IPS }}'
-          echo "Length: ${#VALUE}"
-          echo "First char: ${VALUE:0:1}"
-          echo "Second char: ${VALUE:1:1}"
-          echo "Last char: ${VALUE: -1}"
-          # JSON 유효성 검사
-          echo "$VALUE" | python3 -c "import sys,json; json.load(sys.stdin)" && echo "Valid JSON" || echo "Invalid JSON"
-
-      - id: set-matrix
-        env:
-          SERVER_IPS: ${{ secrets.SERVER_IPS }}
-        run: |
-          echo "matrix=$SERVER_IPS" >> $GITHUB_OUTPUT
-
   setup:
-    needs: prepare
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     strategy:
       fail-fast: false
       max-parallel: 5
       matrix:
-        server: ${{ fromJson(needs.prepare.outputs.matrix) }}
+        server: ${{ fromJson(inputs.server_ips) }}
 
     steps:
       - name: Checkout
