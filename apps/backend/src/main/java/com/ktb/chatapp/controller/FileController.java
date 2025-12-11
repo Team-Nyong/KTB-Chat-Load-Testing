@@ -59,7 +59,7 @@ public class FileController {
         }
     }
 
-    @Operation(summary = "파일 정보 조회", description = "파일 ID로 메타데이터와 접근 URL을 조회합니다.")
+    @Operation(summary = "파일 정보 조회", description = "파일 ID로 메타데이터와 접근 URL을 조회할수있다")
     @GetMapping("/{fileId}")
     public ResponseEntity<?> getFileMetadata(@PathVariable String fileId) {
         try {
