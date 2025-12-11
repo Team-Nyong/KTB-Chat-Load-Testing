@@ -1,0 +1,16 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: mongo-ktb
+    restart: unless-stopped
+    ports:
+      - "${DB_MONGO_PORT}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: bootcamp-chat
+    volumes:
+      - mongo_data:/data/db
+volumes:
+  mongo_data:
+
+# DB_MONGO_PORT=27017
+
