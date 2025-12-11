@@ -1,5 +1,6 @@
 package com.ktb.chatapp.config;
 
+import java.util.Arrays;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -39,17 +40,25 @@ public class RedisConfig {
     @Value("${socketio.redis.database:1}")
     private Integer socketIoRedisDatabase;
 
+    @Value("${socketio.redis.cluster-nodes:}")
+    private String socketIoRedisClusterNodes;
+
     @Bean(name = "sessionRedisClient", destroyMethod = "shutdown")
     public RedissonClient sessionRedissonClient() {
-        return createClient(sessionRedisHost, sessionRedisPort, sessionRedisPassword, sessionRedisDatabase);
+        return createSingleServerClient(
+                sessionRedisHost, sessionRedisPort, sessionRedisPassword, sessionRedisDatabase);
     }
 
     @Bean(name = "socketIoRedisClient", destroyMethod = "shutdown")
     public RedissonClient socketIoRedissonClient() {
-        return createClient(socketIoRedisHost, socketIoRedisPort, socketIoRedisPassword, socketIoRedisDatabase);
+        if (StringUtils.hasText(socketIoRedisClusterNodes)) {
+            return createClusterClient(socketIoRedisClusterNodes, socketIoRedisPassword);
+        }
+        return createSingleServerClient(
+                socketIoRedisHost, socketIoRedisPort, socketIoRedisPassword, socketIoRedisDatabase);
     }
 
-    private RedissonClient createClient(String host, Integer port, String password, Integer database) {
+    private RedissonClient createSingleServerClient(String host, Integer port, String password, Integer database) {
         Config config = new Config();
         var singleServerConfig = config.useSingleServer()
                 .setAddress(String.format("redis://%s:%d", host, port))
@@ -60,5 +69,33 @@ public class RedisConfig {
         }
 
         return Redisson.create(config);
+    }
+
+    private RedissonClient createClusterClient(String clusterNodes, String password) {
+        Config config = new Config();
+        var clusterConfig = config.useClusterServers();
+
+        Arrays.stream(clusterNodes.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .map(this::normalizeRedisAddress)
+                .forEach(clusterConfig::addNodeAddress);
+
+        if (clusterConfig.getNodeAddresses().isEmpty()) {
+            throw new IllegalArgumentException("socketio.redis.cluster-nodes must contain at least one address");
+        }
+
+        if (StringUtils.hasText(password)) {
+            clusterConfig.setPassword(password);
+        }
+
+        return Redisson.create(config);
+    }
+
+    private String normalizeRedisAddress(String address) {
+        if (address.startsWith("redis://") || address.startsWith("rediss://")) {
+            return address;
+        }
+        return "redis://" + address;
     }
 }
