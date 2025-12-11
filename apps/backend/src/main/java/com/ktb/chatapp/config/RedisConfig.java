@@ -16,26 +16,47 @@ import org.springframework.util.StringUtils;
 public class RedisConfig {
 
     @Value("${spring.data.redis.host:localhost}")
-    private String redisHost;
+    private String sessionRedisHost;
 
     @Value("${spring.data.redis.port:6379}")
-    private Integer redisPort;
+    private Integer sessionRedisPort;
 
     @Value("${spring.data.redis.password:}")
-    private String redisPassword;
+    private String sessionRedisPassword;
 
     @Value("${spring.data.redis.database:0}")
-    private Integer redisDatabase;
+    private Integer sessionRedisDatabase;
 
-    @Bean(destroyMethod = "shutdown")
-    public RedissonClient redissonClient() {
+    @Value("${socketio.redis.host:${spring.data.redis.host:localhost}}")
+    private String socketIoRedisHost;
+
+    @Value("${socketio.redis.port:${spring.data.redis.port:6379}}")
+    private Integer socketIoRedisPort;
+
+    @Value("${socketio.redis.password:}")
+    private String socketIoRedisPassword;
+
+    @Value("${socketio.redis.database:1}")
+    private Integer socketIoRedisDatabase;
+
+    @Bean(name = "sessionRedisClient", destroyMethod = "shutdown")
+    public RedissonClient sessionRedissonClient() {
+        return createClient(sessionRedisHost, sessionRedisPort, sessionRedisPassword, sessionRedisDatabase);
+    }
+
+    @Bean(name = "socketIoRedisClient", destroyMethod = "shutdown")
+    public RedissonClient socketIoRedissonClient() {
+        return createClient(socketIoRedisHost, socketIoRedisPort, socketIoRedisPassword, socketIoRedisDatabase);
+    }
+
+    private RedissonClient createClient(String host, Integer port, String password, Integer database) {
         Config config = new Config();
         var singleServerConfig = config.useSingleServer()
-                .setAddress(String.format("redis://%s:%d", redisHost, redisPort))
-                .setDatabase(redisDatabase);
+                .setAddress(String.format("redis://%s:%d", host, port))
+                .setDatabase(database);
 
-        if (StringUtils.hasText(redisPassword)) {
-            singleServerConfig.setPassword(redisPassword);
+        if (StringUtils.hasText(password)) {
+            singleServerConfig.setPassword(password);
         }
 
         return Redisson.create(config);

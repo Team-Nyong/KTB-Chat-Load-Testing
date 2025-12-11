@@ -62,8 +62,14 @@ make verify-java
 | `ENCRYPTION_SALT` | ✅ | 없음 | 암복호화에 사용하는 솔트 값             |
 | `JWT_SECRET` | ✅ | 없음 | HMAC-SHA256 JWT 서명 비밀키      |
 | `MONGO_URI` | ✅ | `mongodb://localhost:27017/bootcamp-chat` | MongoDB 연결 문자열              |
-| `REDIS_HOST` | ✅ | `-` | Redis 연결 문자열                |
-| `REDIS_PORT` | ✅ | `-` | Redis 연결 문자열                |
+| `REDIS_HOST` | ✅ | `localhost` | 세션 Redis 호스트          |
+| `REDIS_PORT` | ✅ | `6379` | 세션 Redis 포트             |
+| `REDIS_PASSWORD` | ❌ | `ktb` | 세션 Redis 비밀번호         |
+| `REDIS_DB` | ❌ | `0` | 세션 Redis DB 인덱스          |
+| `SOCKETIO_REDIS_HOST` | ✅ | `localhost` | Socket.IO Redis 호스트 |
+| `SOCKETIO_REDIS_PORT` | ✅ | `6380` | Socket.IO Redis 포트    |
+| `SOCKETIO_REDIS_PASSWORD` | ❌ | `ktb` | Socket.IO Redis 비밀번호 |
+| `SOCKETIO_REDIS_DB` | ❌ | `1` | Socket.IO Redis DB 인덱스 |
 | `PORT` | ✅ | `5001` | HTTP API 포트 (`server.port`) |
 | `WS_PORT` | ✅ | `5002` | Socket.IO 서버 포트             |
 | `OPENAI_API_KEY` | ❌ | `your_openai_api_key_here` | OpenAI 호출용 API Key          |
@@ -145,11 +151,12 @@ Spring Boot DevTools가 활성화되어 있어 다음 변경사항을 자동으�
 테스트는 JUnit 5와 Testcontainers를 사용하며, Docker가 필요할 수 있습니다. 로컬에서 서비스가 실행 중이면 Testcontainers는 자동으로 재사용합니다.
 
 ## 종속 서비스 실행
-`make dev` 실행시 spring-boot-docker-compose 의해 자동으로 구동됩니다. 아래는 별도로 구동할 경우의 예시 입니다.
+`make dev` 실행시 spring-boot-docker-compose 의해 자동으로 구동됩니다. 로컬에서 직접 띄우려면 세션용/Socket.IO용 Redis를 각각 실행해야 합니다.
 ```bash
-docker compose up -d
+# 백엔드 종속 서비스 (Mongo + Redis 2종)
+docker compose up -d mongo redis-session redis-socketio
 ```
-MongoDB와 Redis가 이미 실행 중이라면 이 단계를 건너뛸 수 있습니다.
+모니터링 스택까지 확인하려면 추가로 `redis-session-exporter`, `redis-socketio-exporter`, `prometheus`, `grafana` 서비스를 기동하세요.
 
 ## 트러블슈팅
 - `.env`의 필수 키가 누락되면 애플리케이션이 부팅 중 예외를 발생시킵니다.
