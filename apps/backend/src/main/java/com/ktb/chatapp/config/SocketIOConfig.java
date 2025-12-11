@@ -76,7 +76,7 @@ public class SocketIOConfig {
     public BeanPostProcessor springAnnotationScanner(@Lazy SocketIOServer socketIOServer) {
         return new SpringAnnotationScanner(socketIOServer);
     }
-    
+
     @Bean
     @ConditionalOnProperty(name = "socketio.enabled", havingValue = "true", matchIfMissing = true)
     public ChatDataStore chatDataStore(RedissonClient redissonClient) {
