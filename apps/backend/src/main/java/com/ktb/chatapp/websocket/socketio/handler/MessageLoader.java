@@ -3,14 +3,18 @@ package com.ktb.chatapp.websocket.socketio.handler;
 import com.ktb.chatapp.dto.FetchMessagesRequest;
 import com.ktb.chatapp.dto.FetchMessagesResponse;
 import com.ktb.chatapp.dto.MessageResponse;
+import com.ktb.chatapp.model.File;
 import com.ktb.chatapp.model.Message;
 import com.ktb.chatapp.model.User;
+import com.ktb.chatapp.repository.FileRepository;
 import com.ktb.chatapp.repository.MessageRepository;
 import com.ktb.chatapp.repository.UserRepository;
 import com.ktb.chatapp.service.MessageReadStatusService;
-import jakarta.annotation.Nullable;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,7 @@ public class MessageLoader {
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final FileRepository fileRepository;
     private final MessageResponseMapper messageResponseMapper;
     private final MessageReadStatusService messageReadStatusService;
 
@@ -66,13 +71,13 @@ public class MessageLoader {
         
         var messageIds = sortedMessages.stream().map(Message::getId).toList();
         messageReadStatusService.updateReadStatus(messageIds, userId);
+
+        Map<String, User> usersById = getUsersById(sortedMessages);
+        Map<String, File> filesById = getFilesById(sortedMessages);
         
         // 메시지 응답 생성
         List<MessageResponse> messageResponses = sortedMessages.stream()
-                .map(message -> {
-                    var user = findUserById(message.getSenderId());
-                    return messageResponseMapper.mapToMessageResponse(message, user);
-                })
+                .map(message -> messageResponseMapper.mapToMessageResponse(message, usersById, filesById))
                 .collect(Collectors.toList());
 
         boolean hasMore = messagePage.hasNext();
@@ -86,15 +91,33 @@ public class MessageLoader {
                 .build();
     }
 
-    /**
-     * AI 경우 null 반환 가능
-     */
-    @Nullable
-    private User findUserById(String id) {
-        if (id == null) {
-            return null;
+    private Map<String, User> getUsersById(List<Message> messages) {
+        Set<String> senderIds = messages.stream()
+                .map(Message::getSenderId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+
+        if (senderIds.isEmpty()) {
+            return Map.of();
         }
-        return userRepository.findById(id)
-                .orElse(null);
+
+        return userRepository.findAllById(senderIds)
+                .stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+    }
+
+    private Map<String, File> getFilesById(List<Message> messages) {
+        Set<String> fileIds = messages.stream()
+                .map(Message::getFileId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+
+        if (fileIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return fileRepository.findAllById(fileIds)
+                .stream()
+                .collect(Collectors.toMap(File::getId, Function.identity()));
     }
 }

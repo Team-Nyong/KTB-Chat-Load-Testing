@@ -60,6 +60,7 @@ class MessageLoaderTest {
         messageLoader = new MessageLoader(
                 messageRepository,
                 userRepository,
+                fileRepository,
                 new MessageResponseMapper(fileRepository),
                 messageReadStatusService
         );
@@ -81,6 +82,8 @@ class MessageLoaderTest {
         
         lenient().when(userRepository.findAllById(anySet()))
                 .thenReturn(List.of(testUser));
+        lenient().when(fileRepository.findAllById(anySet()))
+                .thenReturn(List.of());
         lenient().doNothing().when(messageReadStatusService).updateReadStatus(anyList(), anyString());
     }
     
