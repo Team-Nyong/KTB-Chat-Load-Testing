@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
-import { LockIcon, ErrorCircleIcon, NetworkIcon, RefreshOutlineIcon, GroupIcon } from '@vapor-ui/icons';
+import { LockIcon, ErrorCircleIcon, NetworkIcon, RefreshOutlineIcon, GroupIcon, PlusCircleIcon } from '@vapor-ui/icons';
 import { Button, Text, Badge, Callout, Box, VStack, HStack } from '@vapor-ui/core';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import * as Table from '@/components/Table';
+import socketService from '@/services/socket';
 import axiosInstance from '@/services/axios';
 import { withAuth, useAuth } from '@/contexts/AuthContext';
+import { Toast } from '@/components/Toast';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const CONNECTION_STATUS = {
     CHECKING: 'checking',
@@ -138,17 +141,32 @@ const TableWrapper = ({ children, onScroll, loadingMore, hasMore, rooms }) => {
     );
 };
 
-//ChatRoomsComponent
 function ChatRoomsComponent() {
     const router = useRouter();
     const { user: currentUser } = useAuth();
-    const queryClient = useQueryClient();
+    const [rooms, setRooms] = useState([]);
     const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState(CONNECTION_STATUS.CHECKING);
-    const [sorting] = useState([
+    const [retryCount, setRetryCount] = useState(0);
+    const [isRetrying, setIsRetrying] = useState(false);
+    const [sorting, setSorting] = useState([
         { id: 'createdAt', desc: true }
     ]);
+    const [pageIndex, setPageIndex] = useState(0);
+    const [pageSize] = useState(INITIAL_PAGE_SIZE);
+    const [hasMore, setHasMore] = useState(true);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [joiningRoom, setJoiningRoom] = useState(false);
+
+    // Refs
+    const socketRef = useRef(null);
+    const tableContainerRef = useRef(null);
+    const connectionCheckTimerRef = useRef(null);
+    const isLoadingRef = useRef(false);
+    const previousRoomsRef = useRef([]);
+    const lastLoadedPageRef = useRef(0);
 
     const getRetryDelay = useCallback((retryCount) => {
         const delay = RETRY_CONFIG.baseDelay *
@@ -157,14 +175,76 @@ function ChatRoomsComponent() {
         return Math.min(delay, RETRY_CONFIG.maxDelay);
     }, []);
 
+    const handleAuthError = useCallback(async (error, logout, refreshToken) => {
+        try {
+            if (error.response?.status === 401 || error.response?.data?.code === 'TOKEN_EXPIRED') {
+                const refreshed = await refreshToken();
+                if (refreshed) {
+                    return true;
+                }
+            }
+            await logout();
+            return false;
+        } catch (error) {
+            await logout();
+            return false;
+        }
+    }, []);
+
+    const handleFetchError = useCallback((error, isLoadingMore) => {
+        let errorMessage = '채팅방 목록을 불러오는데 실패했습니다.';
+        let errorType = 'danger';
+        let showRetry = !isRetrying;
+
+        // 인증 만료 에러 처리
+        if (error.message === 'AUTH_EXPIRED') {
+            errorMessage = '인증이 만료되었습니다. 다시 로그인해주세요.';
+            errorType = 'danger';
+            showRetry = false;
+
+            if (!isLoadingMore) {
+                setError({
+                    title: '인증 만료',
+                    message: errorMessage,
+                    type: errorType,
+                    showRetry
+                });
+            }
+
+            setConnectionStatus(CONNECTION_STATUS.ERROR);
+            return;
+        }
+
+        if (error.message === 'SERVER_UNREACHABLE') {
+            errorMessage = '서버와 연결할 수 없습니다. 잠시 후 자동으로 재시도합니다.';
+            errorType = 'warning';
+            showRetry = true;
+
+            if (!isLoadingMore && retryCount < RETRY_CONFIG.maxRetries) {
+                const delay = getRetryDelay(retryCount);
+                setRetryCount(prev => prev + 1);
+                setTimeout(() => {
+                    setIsRetrying(true);
+                    fetchRooms(isLoadingMore);
+                }, delay);
+            }
+        }
+
+        if (!isLoadingMore) {
+            setError({
+                title: '채팅방 목록 로드 실패',
+                message: errorMessage,
+                type: errorType,
+                showRetry
+            });
+        }
+
+        setConnectionStatus(CONNECTION_STATUS.ERROR);
+    }, [isRetrying, retryCount, getRetryDelay]);
+
     const attemptConnection = useCallback(async (retryAttempt = 0) => {
         try {
-            if (connectionStatus === CONNECTION_STATUS.CONNECTED) {
-                return true;
-            }
-            setConnectionStatus(prev =>
-                prev === CONNECTION_STATUS.CONNECTED ? prev : CONNECTION_STATUS.CONNECTING
-            );
+            setConnectionStatus(CONNECTION_STATUS.CONNECTING);
 
             const response = await axiosInstance.get('/api/health', {
                 timeout: 5000,
@@ -181,6 +261,7 @@ function ChatRoomsComponent() {
 
             if (isConnected) {
                 setConnectionStatus(CONNECTION_STATUS.CONNECTED);
+                setRetryCount(0);
                 return true;
             }
 
@@ -201,32 +282,29 @@ function ChatRoomsComponent() {
             setConnectionStatus(CONNECTION_STATUS.ERROR);
             throw new Error('SERVER_UNREACHABLE');
         }
-    }, [connectionStatus, getRetryDelay]);
+    }, [getRetryDelay]);
 
-    const roomsQueryKey = useMemo(
-        () => ['chat-rooms', sorting[0]?.id, sorting[0]?.desc],
-        [sorting]
-    );
+    const fetchRooms = useCallback(async (isLoadingMore = false) => {
+        if (!currentUser?.token || isLoadingRef.current) {
+            return;
+        }
 
-    const {
-        data,
-        error: roomsError,
-        isLoading,
-        isFetching,
-        isFetchingNextPage,
-        fetchNextPage,
-        hasNextPage,
-        refetch,
-        status
-    } = useInfiniteQuery({
-        queryKey: roomsQueryKey,
-        queryFn: async ({ pageParam = 0 }) => {
+        try {
+            isLoadingRef.current = true;
+
+            if (!isLoadingMore) {
+                setLoading(true);
+                setError(null);
+            } else {
+                setLoadingMore(true);
+            }
+
             await attemptConnection();
 
             const response = await axiosInstance.get('/api/rooms', {
                 params: {
-                    page: pageParam,
-                    pageSize: INITIAL_PAGE_SIZE,
+                    page: isLoadingMore ? pageIndex : 0,
+                    pageSize,
                     sortField: sorting[0]?.id,
                     sortOrder: sorting[0]?.desc ? 'desc' : 'asc'
                 }
@@ -236,106 +314,126 @@ function ChatRoomsComponent() {
                 throw new Error('INVALID_RESPONSE');
             }
 
-            const { data: roomData, metadata } = response.data;
+            const { data, metadata } = response.data;
 
-            return {
-                rooms: roomData,
-                metadata,
-                page: pageParam
-            };
-        },
-        initialPageParam: 0,
-        getNextPageParam: (lastPage) => {
-            if (!lastPage?.metadata?.hasMore) return undefined;
-            return (lastPage.page ?? 0) + 1;
-        },
-        enabled: !!currentUser?.token,
-        retry: RETRY_CONFIG.maxRetries,
-        retryDelay: getRetryDelay,
-        staleTime: 30 * 1000,
-        gcTime: 5 * 60 * 1000
-    });
+            setRooms(prev => {
+                if (isLoadingMore) {
+                    const existingIds = new Set(prev.map(room => room._id));
+                    const newRooms = data.filter(room => !existingIds.has(room._id));
+                    return [...prev, ...newRooms];
+                }
+                return data;
+            });
 
-    const rooms = useMemo(() => {
-        if (!data?.pages) return [];
-        const roomMap = new Map();
+            setHasMore(data.length === pageSize && metadata.hasMore);
 
-        data.pages.forEach((page) => {
-            (page.rooms || []).forEach((room) => {
-                if (!roomMap.has(room._id)) {
-                    roomMap.set(room._id, room);
+            if (isInitialLoad) {
+                setIsInitialLoad(false);
+            }
+
+        } catch (error) {
+            handleFetchError(error, isLoadingMore);
+        } finally {
+            if (!isLoadingMore) {
+                setLoading(false);
+            }
+            setLoadingMore(false);
+            isLoadingRef.current = false;
+        }
+    }, [
+        currentUser,
+        pageIndex,
+        pageSize,
+        sorting,
+        isInitialLoad,
+        attemptConnection,
+        handleFetchError
+    ]);
+
+    const handleLoadMore = useCallback(async () => {
+        if (loadingMore || !hasMore || isLoadingRef.current) {
+            return;
+        }
+
+        try {
+            setLoadingMore(true);
+            isLoadingRef.current = true;
+
+            const nextPage = Math.floor(rooms.length / pageSize);
+            setPageIndex(nextPage);
+
+            const response = await axiosInstance.get('/api/rooms', {
+                params: {
+                    page: nextPage,
+                    pageSize,
+                    sortField: sorting[0]?.id,
+                    sortOrder: sorting[0]?.desc ? 'desc' : 'asc'
                 }
             });
-        });
 
-        return Array.from(roomMap.values());
-    }, [data]);
+            if (response.data?.success) {
+                const { data: newRooms, metadata } = response.data;
 
-    const hasMore = Boolean(hasNextPage);
-    const isInitialLoading = isLoading && !data;
+                setRooms(prev => {
+                    const existingIds = new Set(prev.map(room => room._id));
+                    const uniqueNewRooms = newRooms.filter(room => !existingIds.has(room._id));
+                    return [...prev, ...uniqueNewRooms];
+                });
 
-    const handleLoadMore = useCallback(() => {
-        if (!hasMore || isFetchingNextPage) {
-            return;
-        }
-        fetchNextPage();
-    }, [fetchNextPage, hasMore, isFetchingNextPage]);
-
-    const handleRetryFetch = useCallback(() => {
-        if (!currentUser?.token) return;
-        setError(null);
-        setConnectionStatus(CONNECTION_STATUS.CONNECTING);
-        queryClient.resetQueries({ queryKey: roomsQueryKey });
-        refetch();
-    }, [currentUser, queryClient, roomsQueryKey, refetch]);
-
-    useEffect(() => {
-        if (status === 'pending') {
-            setConnectionStatus(CONNECTION_STATUS.CONNECTING);
-        }
-    }, [status]);
-
-    useEffect(() => {
-        if (!roomsError) {
-            if (data) {
-                setError(null);
-                setConnectionStatus(CONNECTION_STATUS.CONNECTED);
+                setHasMore(newRooms.length === pageSize && metadata.hasMore);
             }
-            return;
+        } catch (error) {
+            handleFetchError(error, true);
+        } finally {
+            setLoadingMore(false);
+            isLoadingRef.current = false;
+            Toast.info('추가 채팅방을 불러왔습니다.');
         }
+    }, [loadingMore, hasMore, rooms.length, pageSize, sorting, handleFetchError]);
 
-        const isAuthExpired = roomsError?.response?.status === 401 ||
-            roomsError?.message === 'AUTH_EXPIRED' ||
-            roomsError?.code === 'AUTH_EXPIRED' ||
-            roomsError?.status === 401;
-        const isNetworkError = roomsError?.isNetworkError || roomsError?.code === 'NETWORK_ERROR';
-
-        const message = roomsError?.message === 'INVALID_RESPONSE'
-            ? '채팅방 응답 형식이 올바르지 않습니다.'
-            : roomsError?.message === 'SERVER_UNREACHABLE'
-                ? '서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.'
-                : roomsError?.message || '채팅방 목록을 불러오는데 실패했습니다.';
-
-        setError({
-            title: isAuthExpired ? '인증 만료' : '채팅방 목록 로드 실패',
-            message,
-            type: isAuthExpired ? 'danger' : isNetworkError ? 'warning' : 'danger',
-            showRetry: !isAuthExpired
-        });
-        setConnectionStatus(CONNECTION_STATUS.ERROR);
-    }, [roomsError, data]);
+    // 페이지 인덱스 변경 시 데이터 로드
+    useEffect(() => {
+        if (pageIndex > 0) {
+            fetchRooms(true);
+        }
+    }, [pageIndex, fetchRooms]);
 
     useEffect(() => {
-        if (!currentUser?.token) return;
-        setConnectionStatus(CONNECTION_STATUS.CONNECTING);
-        refetch();
-    }, [currentUser, refetch]);
+        if (!currentUser) return;
+
+        const initFetch = async () => {
+            try {
+                await fetchRooms(false);
+            } catch (error) {
+                setTimeout(() => {
+                    if (connectionStatus === CONNECTION_STATUS.CHECKING) {
+                        fetchRooms(false);
+                    }
+                }, 3000);
+            }
+        };
+
+        initFetch();
+
+        connectionCheckTimerRef.current = setInterval(() => {
+            if (connectionStatus === CONNECTION_STATUS.CHECKING) {
+                attemptConnection();
+            }
+        }, 5000);
+
+        return () => {
+            if (connectionCheckTimerRef.current) {
+                clearInterval(connectionCheckTimerRef.current);
+            }
+        };
+    }, [currentUser, connectionStatus, attemptConnection, fetchRooms]);
 
     useEffect(() => {
         const handleOnline = () => {
             setConnectionStatus(CONNECTION_STATUS.CONNECTING);
-            queryClient.resetQueries({ queryKey: roomsQueryKey });
-            refetch();
+            lastLoadedPageRef.current = 0;
+            setPageIndex(0);
+            fetchRooms(false);
         };
 
         const handleOffline = () => {
@@ -356,7 +454,91 @@ function ChatRoomsComponent() {
                 window.removeEventListener('offline', handleOffline);
             };
         }
-    }, [queryClient, roomsQueryKey, refetch]);
+    }, [fetchRooms]);
+
+    useEffect(() => {
+        if (!currentUser?.token) return;
+
+        let isSubscribed = true;
+
+        const connectSocket = async () => {
+            try {
+                const socket = await socketService.connect({
+                    auth: {
+                        token: currentUser.token,
+                        sessionId: currentUser.sessionId
+                    }
+                }).catch(err => {
+                    console.log('Socket connection error:', err);
+                    router.push('/_error');
+                });
+
+                if (!isSubscribed || !socket) return;
+
+                socketRef.current = socket;
+
+                const handlers = {
+                    connect: () => {
+                        setConnectionStatus(CONNECTION_STATUS.CONNECTED);
+                        socket.emit('joinRoomList');
+                    },
+                    disconnect: (reason) => {
+                        setConnectionStatus(CONNECTION_STATUS.DISCONNECTED);
+                    },
+                    error: (error) => {
+                        setConnectionStatus(CONNECTION_STATUS.ERROR);
+                    },
+                    roomCreated: (newRoom) => {
+                        setRooms(prev => {
+                            const updatedRooms = [newRoom, ...prev];
+                            previousRoomsRef.current = updatedRooms;
+                            return updatedRooms;
+                        });
+                    },
+                    roomDeleted: (roomId) => {
+                        setRooms(prev => {
+                            const updatedRooms = prev.filter(room => room._id !== roomId);
+                            previousRoomsRef.current = updatedRooms;
+                            return updatedRooms;
+                        });
+                    },
+                    roomUpdated: (updatedRoom) => {
+                        setRooms(prev => {
+                            const updatedRooms = prev.map(room =>
+                                room._id === updatedRoom._id ? updatedRoom : room
+                            );
+                            previousRoomsRef.current = updatedRooms;
+                            return updatedRooms;
+                        });
+                    }
+                };
+
+                Object.entries(handlers).forEach(([event, handler]) => {
+                    socket.on(event, handler);
+                });
+
+            } catch (error) {
+                if (!isSubscribed) return;
+
+                if (error.message?.includes('Authentication required') ||
+                    error.message?.includes('Invalid session')) {
+                    // Auth error will be handled by the useAuth context
+                }
+
+                setConnectionStatus(CONNECTION_STATUS.ERROR);
+            }
+        };
+
+        connectSocket();
+
+        return () => {
+            isSubscribed = false;
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
+    }, [currentUser]);
 
     const handleJoinRoom = async (roomId) => {
         if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
@@ -472,7 +654,7 @@ function ChatRoomsComponent() {
                                     // variant="outline"
                                     size="md"
                                     onClick={() => handleJoinRoom(room._id)}
-                                    disabled={connectionStatus !== CONNECTION_STATUS.CONNECTED || joiningRoom}
+                                    disabled={connectionStatus !== CONNECTION_STATUS.CONNECTED}
                                     data-testid={`join-chat-room-button`}
                                 >
                                     입장
@@ -513,8 +695,12 @@ function ChatRoomsComponent() {
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={handleRetryFetch}
-                                    disabled={isFetching}
+                                    onClick={() => {
+                                        lastLoadedPageRef.current = 0;
+                                        setPageIndex(0);
+                                        fetchRooms(false);
+                                    }}
+                                    disabled={isRetrying}
                                 >
                                     <RefreshOutlineIcon size={16} />
                                     재연결
@@ -538,12 +724,15 @@ function ChatRoomsComponent() {
                             <VStack gap="$150" alignItems="flex-start">
                                 <Text typography="subtitle2" style={{ fontWeight: 500 }}>{error.title}</Text>
                                 <Text typography="body2">{error.message}</Text>
-                                {error.showRetry && (
+                                {error.showRetry && !isRetrying && (
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={handleRetryFetch}
-                                        disabled={isFetching}
+                                        onClick={() => {
+                                            lastLoadedPageRef.current = 0;
+                                            setPageIndex(0);
+                                            fetchRooms(false);
+                                        }}
                                     >
                                         다시 시도
                                     </Button>
@@ -553,14 +742,14 @@ function ChatRoomsComponent() {
                     </Callout>
                 )}
 
-                {isInitialLoading ? (
+                {loading ? (
                     <Box padding="$400">
                         <LoadingIndicator text="채팅방 목록을 불러오는 중..." />
                     </Box>
                 ) : rooms.length > 0 ? (
                     <TableWrapper
                         onScroll={handleLoadMore}
-                        loadingMore={isFetchingNextPage}
+                        loadingMore={loadingMore}
                         hasMore={hasMore}
                         rooms={rooms}
                     >
