@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 // axios 인스턴스 생성
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
